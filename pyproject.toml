@@ -1,0 +1,22 @@
+[project]
+name = "tapo-home"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "hap-python[qrcode]>=5.0.0",
+    "python-kasa",
+]
+
+[tool.uv.sources]
+python-kasa = { git = "https://github.com/ZeliardM/python-kasa.git", rev = "e7084472972f08f2e2235b342f3964aedbfaeb3b" }
+
+[project.scripts]
+tapo = "tapo_home.cli:main"
+tapo-homekit = "tapo_home.bridge:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["tapo_home"]

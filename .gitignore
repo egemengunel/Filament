@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+
+# Local secrets & machine state (HomeKit pairing keys, home network details)
+homekit.state
+homekit-setup.txt
+config.json
+
+# Xcode
+BulbWidget/build/
+BulbWidget/Bulb.xcodeproj/
+xcuserdata/
+*.xcuserstate
+.DS_Store
