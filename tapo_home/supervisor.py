@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import re
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -42,11 +43,32 @@ def current_network() -> tuple[str | None, str | None]:
     return (normalize_mac(mac.group(1)) if mac else None), ip
 
 
+def bulb_reachable(host: str, port: int = 80, timeout: float = 2.0) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 class Supervisor:
-    def __init__(self, home_mac: str) -> None:
+    def __init__(self, home_mac: str, bulb_host: str | None) -> None:
         self.home_mac = normalize_mac(home_mac)
+        self.bulb_host = bulb_host
         self.bridge: subprocess.Popen | None = None
         self.bridge_ip: str | None = None
+        self.last_status: str | None = None
+
+    def is_home(self, mac: str | None, ip: str | None) -> tuple[bool, str]:
+        if ip is None:
+            return False, "offline"
+        if mac is not None:
+            return mac == self.home_mac, f"gateway MAC {mac}"
+        # macOS 27 hides ARP entries from background processes, so the MAC
+        # can come back empty; fall back to whether the bulb itself answers.
+        if self.bulb_host and bulb_reachable(self.bulb_host):
+            return True, f"gateway MAC hidden, bulb {self.bulb_host} reachable"
+        return False, "gateway MAC hidden, bulb unreachable"
 
     def start_bridge(self, ip: str) -> None:
         log.info("On home network (%s), starting HomeKit bridge", ip)
@@ -66,7 +88,11 @@ class Supervisor:
 
     def check(self) -> None:
         mac, ip = current_network()
-        at_home = mac == self.home_mac and ip is not None
+        at_home, why = self.is_home(mac, ip)
+        status = f"{'home' if at_home else 'away'} ({why})"
+        if status != self.last_status:
+            log.info("Network: %s", status)
+            self.last_status = status
         if self.bridge is not None and self.bridge.poll() is not None:
             log.warning("Bridge exited with %s", self.bridge.returncode)
             self.bridge = None
@@ -89,7 +115,7 @@ def main() -> None:
     config = load_config()
     if "home_gateway_mac" not in config:
         sys.exit("config.json needs home_gateway_mac (your router's MAC address)")
-    supervisor = Supervisor(config["home_gateway_mac"])
+    supervisor = Supervisor(config["home_gateway_mac"], config.get("host"))
 
     def shutdown(*_: object) -> None:
         supervisor.stop_bridge("shutting down")
